@@ -61,6 +61,8 @@ pub struct Options {
     pub run_read_write_set: bool,
     /// Whether to run the internal reference escape analysis instead of the prover
     pub run_escape: bool,
+    /// Whether to run the internal reference confidentiality analysis instead of the prover
+    pub run_confidentiality: bool,
     /// The paths to the Move sources.
     pub move_sources: Vec<String>,
     /// The paths to any dependencies for the Move sources. Those will not be verified but
@@ -99,6 +101,7 @@ impl Default for Options {
             run_errmapgen: false,
             run_read_write_set: false,
             run_escape: false,
+            run_confidentiality: false,
             verbosity_level: LevelFilter::Info,
             move_sources: vec![],
             move_deps: vec![],
@@ -316,6 +319,11 @@ impl Options {
                 Arg::new("escape")
                     .long("escape")
                     .help("runs the escape analysis instead of the prover.")
+            )
+            .arg(
+                Arg::new("confidentiality")
+                    .long("confidentiality")
+                    .help("runs the confidentiality analysis instead of the prover.")
             )
             .arg(
                 Arg::new("read-write-set")
@@ -690,6 +698,9 @@ impl Options {
         }
         if matches.is_present("escape") {
             options.run_escape = true;
+        }
+        if matches.is_present("confidentiality") {
+            options.run_confidentiality = true;
         }
         if matches.is_present("trace") {
             options.prover.auto_trace_level = AutoTraceLevel::VerifiedFunction;

@@ -4,7 +4,7 @@
 
 //! This module defines traits and representations of domains used in dataflow analysis.
 
-use im::{ordmap, ordset, OrdMap, OrdSet};
+use im::{ordmap, ordset, OrdMap, OrdSet, Vector};
 use itertools::Itertools;
 use std::{
     borrow::Borrow,
@@ -283,5 +283,109 @@ impl<K: Ord + Clone, V: AbstractDomain + Clone + PartialEq> MapDomain<K, V> {
             })
             .collect_vec();
         self.extend(new_values.into_iter());
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Stack Type
+
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
+pub struct StackDomain<E: Clone>(Vector<E>);
+
+impl<E: Clone> Default for StackDomain<E> {
+    fn default() -> Self {
+        Self(Vector::default())
+    }
+}
+
+impl<E: Clone> From<Vector<E>> for StackDomain<E> {
+    fn from(vec: Vector<E>) -> Self {
+        Self(vec)
+    }
+}
+
+impl<E: Clone> Deref for StackDomain<E> {
+    type Target = Vector<E>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<E: Clone> DerefMut for StackDomain<E> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<E: Clone + Debug> Debug for StackDomain<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl<E: Clone + AbstractDomain + std::cmp::PartialEq> AbstractDomain for StackDomain<E> {
+    fn join(&mut self, other: &Self) -> JoinResult {
+        let prev_state = if other.len() > 1 {
+            // get prev state in other if exists - safe unwrap
+            other.get(other.len() - 2).unwrap()
+        } else {
+            // current one otherwise
+            other.back().unwrap_or_else(|| panic!("Argument stack is empty"))
+        };
+        // remove one layer from self stack
+        if self.len() > 1 {
+            self.pop_back();
+        }
+        // compute join result
+        if prev_state == self.back().unwrap_or_else(|| panic!("Self is empty")) {
+            return JoinResult::Unchanged;
+        }
+        JoinResult::Changed
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Confidentiality analisys type - tuple containing a StackDomain and a MapDomain
+
+#[derive(Clone)]
+pub struct CustomState<K: Ord, V: AbstractDomain + Clone>(StackDomain<V>, MapDomain<K, V>);
+
+impl<K: Ord + Clone, V: AbstractDomain + Clone> Default for CustomState<K, V> {
+    fn default() -> Self {
+        Self(StackDomain::default(), MapDomain::default())
+    }
+}
+
+impl<K: Ord + Clone + Debug, V: AbstractDomain + Clone + Debug> Debug for CustomState<K, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "PC stack: {:?}", self.0)
+            .and_then(|_| writeln!(f,"Locals: {:?}", self.1))
+    }
+}
+
+impl<K: Ord + Clone, V: AbstractDomain + Clone + PartialEq> AbstractDomain for CustomState<K, V> {
+    fn join(&mut self, other: &Self) -> JoinResult {
+        let stack_join = self.0.join(&other.0);
+        let map_join = self.1.join(&other.1);
+        stack_join.combine(map_join)
+    }
+}
+
+impl<K: Ord + Clone, V: AbstractDomain + Clone> CustomState<K, V> {
+    pub fn get_stack(&self) -> &StackDomain<V> {
+        &self.0
+    }
+
+    pub fn get_stack_mut(&mut self) -> &mut StackDomain<V> {
+        &mut self.0
+    }
+
+    pub fn get_map(&self) -> &MapDomain<K,V> {
+        &self.1
+    }
+
+    pub fn get_map_mut(&mut self) -> &mut MapDomain<K,V> {
+        &mut self.1
     }
 }
